@@ -4,7 +4,7 @@ import textwrap
 from pathlib import Path
 from typing import Optional
 
-from PyQt5 import QtCore, QtWidgets
+from PyQt5 import QtCore, QtGui, QtWidgets
 
 try:
     from PyQt5 import QtWebEngineWidgets
@@ -56,6 +56,65 @@ def _save_api_key(api_key: str) -> bool:
     except OSError:
         return False
     return True
+
+
+class ApiKeyDialog(QtWidgets.QDialog):
+    """Dialog that allows pasting or revealing the Gemini API key."""
+
+    def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Gemini API Key Required")
+        self.setModal(True)
+
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.addWidget(QtWidgets.QLabel("Enter your Gemini API key:"))
+
+        self._line_edit = QtWidgets.QLineEdit()
+        self._line_edit.setEchoMode(QtWidgets.QLineEdit.Password)
+        self._line_edit.setPlaceholderText("Paste your API key here…")
+        self._line_edit.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
+        self._line_edit.setClearButtonEnabled(True)
+        layout.addWidget(self._line_edit)
+
+        paste_action = QtWidgets.QAction("Paste", self._line_edit)
+        paste_action.setShortcut(QtGui.QKeySequence.Paste)
+        paste_action.triggered.connect(self._line_edit.paste)
+        self._line_edit.addAction(paste_action)
+
+        paste_button = QtWidgets.QPushButton("Paste from clipboard")
+        paste_button.clicked.connect(self._paste_from_clipboard)
+        layout.addWidget(paste_button)
+
+        toggle_checkbox = QtWidgets.QCheckBox("Show API key")
+        toggle_checkbox.toggled.connect(self._toggle_echo_mode)
+        layout.addWidget(toggle_checkbox)
+
+        button_box = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel
+        )
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        layout.addWidget(button_box)
+
+        self._line_edit.setFocus()
+
+    def api_key(self) -> str:
+        return self._line_edit.text().strip()
+
+    def _toggle_echo_mode(self, checked: bool) -> None:
+        self._line_edit.setEchoMode(
+            QtWidgets.QLineEdit.Normal if checked else QtWidgets.QLineEdit.Password
+        )
+
+    def _paste_from_clipboard(self) -> None:
+        clipboard = QtWidgets.QApplication.clipboard()
+        if clipboard is None:
+            return
+        text = clipboard.text(QtGui.QClipboard.Clipboard)
+        if not text and clipboard.supportsSelection():
+            text = clipboard.text(QtGui.QClipboard.Selection)
+        if text:
+            self._line_edit.setText(text.strip())
 
 
 class GeminiWorker(QtCore.QObject):
@@ -234,20 +293,15 @@ class BrowserWindow(QtWidgets.QMainWindow):
 
     def _prompt_for_api_key(self) -> None:
         while True:
-            api_key, accepted = QtWidgets.QInputDialog.getText(
-                self,
-                "Gemini API Key Required",
-                "Enter your Gemini API key:",
-                QtWidgets.QLineEdit.Password,
-            )
-            if not accepted:
+            dialog = ApiKeyDialog(self)
+            if dialog.exec_() != QtWidgets.QDialog.Accepted:
                 if not self._api_key:
                     self.statusBar().showMessage(
                         "Gemini assistant disabled until an API key is provided.", 10000
                     )
                 return
 
-            sanitized = api_key.strip()
+            sanitized = dialog.api_key()
             if not sanitized:
                 QtWidgets.QMessageBox.warning(
                     self,
