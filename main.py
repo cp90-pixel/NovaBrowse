@@ -1,6 +1,8 @@
 import os
 import sys
 import textwrap
+from pathlib import Path
+from typing import Optional
 
 from PyQt5 import QtCore, QtWidgets
 
@@ -22,6 +24,38 @@ except ImportError as exc:
 
 
 MAX_HTML_CHARS = 12000
+CONFIG_DIR = Path.home() / ".novabrowse"
+API_KEY_FILE = CONFIG_DIR / "gemini_api_key"
+
+
+def _load_api_key() -> Optional[str]:
+    env_key = os.getenv("GEMINI_API_KEY")
+    if env_key:
+        env_key = env_key.strip()
+        if env_key:
+            return env_key
+
+    try:
+        file_key = API_KEY_FILE.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return None
+    except OSError:
+        return None
+    return file_key or None
+
+
+def _save_api_key(api_key: str) -> bool:
+    sanitized = api_key.strip()
+    if not sanitized:
+        return False
+    try:
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        API_KEY_FILE.write_text(f"{sanitized}\n", encoding="utf-8")
+        if os.name == "posix":
+            os.chmod(API_KEY_FILE, 0o600)
+    except OSError:
+        return False
+    return True
 
 
 class GeminiWorker(QtCore.QObject):
@@ -75,7 +109,7 @@ class BrowserWindow(QtWidgets.QMainWindow):
         self.setWindowTitle("NovaBrowse")
         self.resize(1200, 800)
 
-        self._api_key = os.getenv("GEMINI_API_KEY")
+        self._api_key = _load_api_key()
 
         self.web_view = QtWebEngineWidgets.QWebEngineView()
         self.web_view.setUrl(QtCore.QUrl("https://example.com"))
@@ -137,7 +171,9 @@ class BrowserWindow(QtWidgets.QMainWindow):
 
         if not self._api_key:
             self.run_task_button.setEnabled(False)
-            self.statusBar().showMessage("Set GEMINI_API_KEY to enable the Gemini assistant.", 15000)
+            QtCore.QTimer.singleShot(0, self._prompt_for_api_key)
+        else:
+            self.statusBar().showMessage("Gemini assistant ready.", 5000)
 
         self.web_view.urlChanged.connect(self._sync_url_bar)
 
@@ -195,6 +231,46 @@ class BrowserWindow(QtWidgets.QMainWindow):
     def _on_gemini_error(self, message: str) -> None:
         self.assistant_output.setPlainText(f"Gemini request failed: {message}")
         self.run_task_button.setEnabled(True)
+
+    def _prompt_for_api_key(self) -> None:
+        while True:
+            api_key, accepted = QtWidgets.QInputDialog.getText(
+                self,
+                "Gemini API Key Required",
+                "Enter your Gemini API key:",
+                QtWidgets.QLineEdit.Password,
+            )
+            if not accepted:
+                if not self._api_key:
+                    self.statusBar().showMessage(
+                        "Gemini assistant disabled until an API key is provided.", 10000
+                    )
+                return
+
+            sanitized = api_key.strip()
+            if not sanitized:
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    "Invalid API Key",
+                    "Please enter a non-empty Gemini API key.",
+                )
+                continue
+
+            self._api_key = sanitized
+            if not _save_api_key(sanitized):
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    "Could Not Save Key",
+                    (
+                        "The Gemini API key could not be saved to "
+                        f"{API_KEY_FILE}. It will be used for this session only."
+                    ),
+                )
+            else:
+                self.statusBar().showMessage("Gemini API key saved. Assistant enabled.", 7000)
+
+            self.run_task_button.setEnabled(True)
+            return
 
 
 def main() -> None:

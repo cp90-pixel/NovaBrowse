@@ -13,14 +13,11 @@ NovaBrowse is a lightweight, PyQt-based desktop browser with a built-in Gemini a
    ```bash
    pip install -r requirements.txt
    ```
-3. Provide your Gemini API key:
-   ```bash
-   export GEMINI_API_KEY="your-api-key"   # On Windows use: set GEMINI_API_KEY=your-api-key
-   ```
-4. Launch NovaBrowse:
+3. Launch NovaBrowse:
    ```bash
    python main.py
    ```
+4. On first launch you will be prompted for your Gemini API key. The key is stored in `~/.novabrowse/gemini_api_key` so you do not have to re-enter it next time. You can still set the `GEMINI_API_KEY` environment variable if you prefer to manage it yourself.
 
 ## Using the Assistant
 
@@ -30,7 +27,7 @@ NovaBrowse is a lightweight, PyQt-based desktop browser with a built-in Gemini a
 - Enter a short instruction in the Gemini Assistant panel (for example, “Summarize this article” or “List the main steps mentioned on the page”).
 - Click “Run Task with Gemini” to send the task along with the current page snapshot to Gemini. The response appears in the panel.
 
-If the assistant button is disabled, check that `GEMINI_API_KEY` is set before starting the application.
+If the assistant button is disabled, provide a Gemini API key when prompted or set `GEMINI_API_KEY` before starting the application.
 
 ## Notes
 
