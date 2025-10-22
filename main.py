@@ -237,15 +237,36 @@ class BrowserWindow(QtWidgets.QMainWindow):
         self.web_view.urlChanged.connect(self._sync_url_bar)
 
     def load_url(self) -> None:
-        raw_url = self.url_bar.text().strip()
-        if not raw_url:
+        raw_input = self.url_bar.text().strip()
+        if not raw_input:
             return
-        if "://" not in raw_url:
-            raw_url = f"https://{raw_url}"
-        self.web_view.setUrl(QtCore.QUrl(raw_url))
+        if "://" not in raw_input:
+            raw_input = f"https://{raw_input}"
+
+        url = QtCore.QUrl.fromUserInput(raw_input)
+        if not url.isValid():
+            self.statusBar().showMessage("Invalid URL. Please try again.", 5000)
+            return
+
+        self._set_url_bar_text(url.toString())
+        self.web_view.setUrl(url)
 
     def _sync_url_bar(self, url: QtCore.QUrl) -> None:
-        self.url_bar.setText(url.toString())
+        if self.url_bar.hasFocus() and self.url_bar.isModified():
+            return
+        self._set_url_bar_text(url.toString())
+
+    def _set_url_bar_text(self, text: str) -> None:
+        if self.url_bar.text() == text:
+            self.url_bar.setModified(False)
+            return
+
+        was_blocked = self.url_bar.blockSignals(True)
+        try:
+            self.url_bar.setText(text)
+        finally:
+            self.url_bar.blockSignals(was_blocked)
+        self.url_bar.setModified(False)
 
     def handle_run_task(self) -> None:
         if not self._api_key:
